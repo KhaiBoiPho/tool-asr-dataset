@@ -1,0 +1,31 @@
+# Cấu hình pipeline. Sửa file này để đổi hành vi mà không cần sửa code.
+
+whisper:
+  device: cuda            # cuda | cpu
+  model_size: auto         # auto = tự dò theo VRAM free; hoặc ép cứng: large-v3 | medium | small
+  compute_type: auto       # auto = tự dò theo VRAM free; hoặc ép cứng: float16 | int8_float16 | int8
+  language: vi             # ngôn ngữ chính của audio (thuật ngữ tiếng Anh vẫn được giữ nguyên)
+  beam_size: 5
+
+# Chỉ dùng khi model_size/compute_type = auto. Đơn vị: MB VRAM free (nvidia-smi).
+# Lưu ý: số đo thực tế trên RTX 3050 4GB cho thấy large-v3/int8_float16 vẫn OOM khi
+# free chỉ ~3.7GB (dù đã ép beam_size=1) — mức tiêu thụ lúc generate cao hơn nhiều so
+# với lúc load model. Ngưỡng dưới đây đã nâng lên để phản ánh đúng thực tế đó.
+vram_thresholds_mb:
+  float16: 8000        # >= 8000MB free -> large-v3 + float16 (an toàn cho GPU 8GB+ như 3070)
+  int8_float16: 4500   # >= 4500MB free -> large-v3 + int8_float16
+  # < 4500MB free -> fallback: medium + int8 (kèm cảnh báo trong log) — đây là mức
+  # thực tế cho GPU 4GB như RTX 3050 Laptop
+
+clip:
+  max_duration_sec: 30   # độ dài tối đa mỗi clip
+  pad_sec: 1.0            # đệm thêm trước/sau đoạn khớp thuật ngữ
+  merge_gap_sec: 2.0      # gộp các đoạn khớp cách nhau dưới ngưỡng này thành 1 clip
+
+matching:
+  fuzzy_threshold: 80     # ngưỡng similarity (0-100) khi so khớp thuật ngữ bằng rapidfuzz
+
+paths:
+  terms_file: terms.yaml
+  output_dir: output
+  tmp_dir: .tmp

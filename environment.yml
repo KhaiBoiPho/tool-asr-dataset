@@ -1,0 +1,17 @@
+name: doan-frp-pipeline
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - cuda-version=12.4
+  - libcublas
+  - cudnn
+  - pip
+  - pip:
+      - faster-whisper
+      - yt-dlp
+      - rapidfuzz
+      - pyyaml
+      - openai
+      - streamlit

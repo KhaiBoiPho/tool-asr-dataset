@@ -1,0 +1,21 @@
+# Output pipeline (clip/audio/metadata sinh ra khi chạy)
+output/
+.tmp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit
+.streamlit/
+
+# Secrets / API keys (không có file nào lưu key trong repo, nhưng phòng khi thêm sau)
+.env
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Claude Code local state
+.claude/

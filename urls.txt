@@ -1,0 +1,3 @@
+# Danh sách link YouTube cho batch mode, mỗi dòng 1 link.
+# Dòng bắt đầu bằng # bị bỏ qua.
+# https://www.youtube.com/watch?v=xxxxxxxxxxx
