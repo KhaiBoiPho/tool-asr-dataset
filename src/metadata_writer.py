@@ -10,6 +10,7 @@ CSV_FIELDS = [
     "start_sec", "end_sec", "duration_sec",
     "matched_terms", "confidence", "transcript_vi",
     "llm_extra_terms", "transcript_vi_llm_suggested",
+    "llm_confidence_rate", "llm_valid",
 ]
 
 
@@ -36,6 +37,8 @@ def build_rows(video_meta: dict, exported_clips: list[dict], output_root: Path) 
                 "transcript_vi": c["transcript_vi"],
                 "llm_extra_terms": "",
                 "transcript_vi_llm_suggested": "",
+                "llm_confidence_rate": "",
+                "llm_valid": "",
             }
         )
     return rows

@@ -1,29 +1,34 @@
 # Cấu hình pipeline. Sửa file này để đổi hành vi mà không cần sửa code.
 
 whisper:
-  device: cuda            # cuda | cpu
-  model_size: auto         # auto = tự dò theo VRAM free; hoặc ép cứng: large-v3 | medium | small
-  compute_type: auto       # auto = tự dò theo VRAM free; hoặc ép cứng: float16 | int8_float16 | int8
+  device: cuda            # cuda (bắt buộc — không hỗ trợ CPU)
+  model_size: auto         # auto = luôn dùng large-v3; hoặc ép cứng: large-v3
+  compute_type: auto       # auto = tự dò theo VRAM free; hoặc ép cứng: float16 | int8_float16
   language: vi             # ngôn ngữ chính của audio (thuật ngữ tiếng Anh vẫn được giữ nguyên)
   beam_size: 5
 
 # Chỉ dùng khi model_size/compute_type = auto. Đơn vị: MB VRAM free (nvidia-smi).
-# Lưu ý: số đo thực tế trên RTX 3050 4GB cho thấy large-v3/int8_float16 vẫn OOM khi
-# free chỉ ~3.7GB (dù đã ép beam_size=1) — mức tiêu thụ lúc generate cao hơn nhiều so
-# với lúc load model. Ngưỡng dưới đây đã nâng lên để phản ánh đúng thực tế đó.
+# Hệ thống chỉ hỗ trợ GPU >= 8GB (2 tier: ~8GB và >=12GB). Tier <8GB đã bị loại bỏ —
+# thực nghiệm trên RTX 3050 4GB (chỉ ~3.7GB free) cho thấy dễ OOM và khi phải fallback
+# xuống model nhỏ + beam_size=1 thì timestamp Whisper trở nên không ổn định (transcript
+# không khớp audio thật). Nếu VRAM free dưới ngưỡng int8_float16, hệ thống sẽ báo lỗi
+# rõ ràng thay vì âm thầm hạ chất lượng.
 vram_thresholds_mb:
-  float16: 8000        # >= 8000MB free -> large-v3 + float16 (an toàn cho GPU 8GB+ như 3070)
-  int8_float16: 4500   # >= 4500MB free -> large-v3 + int8_float16
-  # < 4500MB free -> fallback: medium + int8 (kèm cảnh báo trong log) — đây là mức
-  # thực tế cho GPU 4GB như RTX 3050 Laptop
+  float16: 10000       # >= 10000MB free -> large-v3 + float16 (tốt nhất, dành cho GPU >=12GB)
+  int8_float16: 6500   # >= 6500MB free -> large-v3 + int8_float16 (dành cho GPU ~8GB)
+  # < 6500MB free -> báo lỗi InsufficientVRAMError, không còn fallback thấp hơn
 
 clip:
-  max_duration_sec: 30   # độ dài tối đa mỗi clip
-  pad_sec: 1.0            # đệm thêm trước/sau đoạn khớp thuật ngữ
+  max_duration_sec: 30    # độ dài tối đa mỗi clip
+  min_duration_sec: 5.0   # độ dài tối thiểu — mở rộng sang câu liền kề nếu ngắn hơn
+  pad_sec: 1.0            # đệm dùng khi fallback (không tìm được ranh giới câu bao trùm)
   merge_gap_sec: 2.0      # gộp các đoạn khớp cách nhau dưới ngưỡng này thành 1 clip
 
 matching:
   fuzzy_threshold: 80     # ngưỡng similarity (0-100) khi so khớp thuật ngữ bằng rapidfuzz
+
+llm_validation:
+  confidence_threshold: 75   # % tự tin ngữ nghĩa tối thiểu để đánh nhãn TRUE (dưới mức này -> FALSE)
 
 paths:
   terms_file: terms.yaml

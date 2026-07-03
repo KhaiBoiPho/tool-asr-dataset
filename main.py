@@ -13,8 +13,10 @@ from pathlib import Path
 
 import yaml
 
+import sys
+
 from src import clip_exporter, downloader, llm_validator, metadata_writer, segment_builder, term_matcher, transcriber
-from src.gpu_config import downgrade_settings, resolve_whisper_settings
+from src.gpu_config import InsufficientVRAMError, downgrade_settings, resolve_whisper_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("main")
@@ -109,10 +111,18 @@ def process_video(
 
     if openrouter_api_key:
         logger.info("Đang validate thêm bằng Claude Haiku (OpenRouter)...")
+        confidence_threshold = cfg["llm_validation"]["confidence_threshold"]
         for row in rows:
             result = llm_validator.validate_clip(row["transcript_vi"], terms, openrouter_api_key)
             row["llm_extra_terms"] = ";".join(result["extra_terms"])
             row["transcript_vi_llm_suggested"] = result["suggested_text"]
+            confidence = result["confidence_percent"]
+            row["llm_confidence_rate"] = confidence if confidence is not None else ""
+            row["llm_valid"] = (
+                ("TRUE" if confidence >= confidence_threshold else "FALSE")
+                if confidence is not None
+                else ""
+            )
 
     metadata_writer.write_video_metadata(rows, video_dir)
     metadata_writer.append_aggregate_csv(rows, output_root)
@@ -145,7 +155,11 @@ def main():
 
     openrouter_api_key = args.openrouter_key or os.environ.get("OPENROUTER_API_KEY")
 
-    whisper_settings = resolve_whisper_settings(cfg["whisper"], cfg["vram_thresholds_mb"])
+    try:
+        whisper_settings = resolve_whisper_settings(cfg["whisper"], cfg["vram_thresholds_mb"])
+    except InsufficientVRAMError as e:
+        logger.error(str(e))
+        sys.exit(1)
     logger.info("Whisper settings: %s", whisper_settings)
     state = ModelState(whisper_settings)
 
