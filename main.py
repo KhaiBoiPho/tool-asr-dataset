@@ -63,7 +63,13 @@ def transcribe_with_fallback(state: ModelState, audio_path: Path, terms: list[st
                 raise
             downgraded = downgrade_settings(state.settings)
             if downgraded is None:
-                logger.error("CUDA OOM ở bậc thấp nhất (%s), không thể downgrade thêm.", state.settings)
+                logger.error(
+                    "CUDA OOM ở bậc thấp nhất (%s), không thể downgrade thêm. "
+                    "Reload lại model để tránh CUDA context hỏng lây sang video tiếp theo.",
+                    state.settings,
+                )
+                del state.model
+                state.model = transcriber.load_model(state.settings)
                 raise
             logger.warning("CUDA OOM với %s -> downgrade sang %s và thử lại", state.settings, downgraded)
             del state.model
@@ -87,8 +93,12 @@ def process_video(
 
     segments = transcribe_with_fallback(state, video_meta["audio_path"], terms, cfg)
 
-    words = term_matcher.flatten_words(segments)
-    matches = term_matcher.find_term_matches(words, terms, cfg["matching"]["fuzzy_threshold"])
+    if openrouter_api_key:
+        logger.info("Phát hiện thuật ngữ qua Claude Haiku (không giới hạn theo terms.yaml)...")
+        matches = llm_validator.detect_terms_in_segments(segments, openrouter_api_key)
+    else:
+        words = term_matcher.flatten_words(segments)
+        matches = term_matcher.find_term_matches(words, terms, cfg["matching"]["fuzzy_threshold"])
     logger.info("Tìm thấy %d lần khớp thuật ngữ", len(matches))
 
     if not matches:

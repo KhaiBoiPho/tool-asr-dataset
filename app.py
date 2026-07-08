@@ -20,27 +20,40 @@ output_dir = st.text_input(
 )
 
 openrouter_api_key = st.text_input(
-    "OpenRouter API key (tuỳ chọn — để trống nếu không cần validate bằng Claude Haiku)",
+    "OpenRouter API key (khuyến nghị nhập — dùng Claude Haiku để tự phát hiện MỌI thuật ngữ "
+    "kỹ thuật/vật liệu tiếng Anh trong video, không giới hạn theo terms.yaml. Để trống thì "
+    "chỉ khớp theo danh sách cố định trong terms.yaml.)",
     type="password",
 )
 
-video_url = st.text_input("Link video YouTube")
+video_urls = st.text_area(
+    "Link video YouTube (mỗi dòng 1 link, có thể dán nhiều video để xử lý tuần tự)",
+    height=150,
+)
 
 run_clicked = st.button("Chạy", type="primary")
 
 if run_clicked:
-    if not video_url.strip():
-        st.error("Cần nhập link video.")
+    urls = [line.strip() for line in video_urls.splitlines() if line.strip()]
+    if not urls:
+        st.error("Cần nhập ít nhất 1 link video.")
     else:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-        cmd = [sys.executable, "main.py", video_url.strip(), "--output-dir", output_dir]
 
         env = os.environ.copy()
         if openrouter_api_key.strip():
             env["OPENROUTER_API_KEY"] = openrouter_api_key.strip()
 
-        with st.spinner("Đang xử lý (tải video, transcribe, cắt clip)... có thể mất vài phút."):
+        if len(urls) == 1:
+            cmd = [sys.executable, "main.py", urls[0], "--output-dir", output_dir]
+            spinner_msg = "Đang xử lý (tải video, transcribe, cắt clip)... có thể mất vài phút."
+        else:
+            batch_file = Path(output_dir) / "_batch_urls.txt"
+            batch_file.write_text("\n".join(urls), encoding="utf-8")
+            cmd = [sys.executable, "main.py", "--batch", str(batch_file), "--output-dir", output_dir]
+            spinner_msg = f"Đang xử lý tuần tự {len(urls)} video (dùng chung model đã load)... có thể mất nhiều thời gian."
+
+        with st.spinner(spinner_msg):
             result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
         st.subheader("Log")

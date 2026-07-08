@@ -49,6 +49,83 @@ def _parse_json_response(raw: str) -> dict:
     return json.loads(raw)
 
 
+DETECT_SYSTEM_PROMPT = (
+    "Bạn nhận được danh sách câu tiếng Việt (có lẫn thuật ngữ kỹ thuật/khoa học/vật liệu "
+    "tiếng Anh, ví dụ composite, FRP, HDPE, resin, nano, graphene, carbon fiber, v.v. — "
+    "KHÔNG giới hạn trong 1 lĩnh vực cố định, bất kỳ thuật ngữ kỹ thuật/khoa học/vật liệu "
+    "tiếng Anh hợp lệ nào cũng được tính), mỗi câu có 1 chỉ số [index] đứng trước. Với MỖI "
+    "câu có chứa ít nhất 1 thuật ngữ kỹ thuật tiếng Anh THẬT SỰ tồn tại (không phải do ASR "
+    "bịa ra/lỗi chính tả vô nghĩa), trả về index của câu đó + thuật ngữ tìm được (giữ nguyên "
+    "chính tả xuất hiện trong câu) + độ tự tin (0-100) rằng đây đúng là thuật ngữ kỹ thuật "
+    "hợp lệ. Bỏ qua câu không có thuật ngữ nào. Nếu 1 câu có nhiều thuật ngữ, trả nhiều dòng "
+    "cho cùng 1 index. Chỉ trả về JSON hợp lệ, không thêm giải thích, đúng schema:\n"
+    '{"matches": [{"index": 0, "term": "...", "confidence": 0-100}]}'
+)
+
+
+def detect_terms_in_segments(segments: list[dict], api_key: str, batch_size: int = 25) -> list[dict]:
+    """Quét toàn bộ transcript bằng Claude Haiku để tự phát hiện thuật ngữ kỹ thuật/khoa học/
+    vật liệu tiếng Anh xuất hiện trong câu tiếng Việt, KHÔNG giới hạn theo danh sách terms.yaml
+    cố định — thay thế cho term_matcher.find_term_matches khi có OpenRouter API key.
+
+    Trả về matches cùng schema với term_matcher.find_term_matches: {term, matched_text,
+    start, end, confidence} — start/end lấy theo ranh giới câu (segment) chứa thuật ngữ, đủ
+    để segment_builder căn clip theo câu như bình thường (không cần định vị word-level).
+
+    Không bao giờ raise ra ngoài — batch nào gọi API lỗi thì bỏ qua batch đó (log warning),
+    không làm gián đoạn cả video.
+    """
+    if not segments:
+        return []
+
+    client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+    indexed_segments = list(enumerate(segments))
+    matches = []
+
+    for batch_start in range(0, len(indexed_segments), batch_size):
+        batch = indexed_segments[batch_start : batch_start + batch_size]
+        batch_text = "\n".join(f'[{i}] {seg["text"]}' for i, seg in batch)
+        try:
+            resp = client.chat.completions.create(
+                model=MODEL,
+                temperature=0,
+                messages=[
+                    {"role": "system", "content": DETECT_SYSTEM_PROMPT},
+                    {"role": "user", "content": batch_text},
+                ],
+            )
+            data = _parse_json_response(resp.choices[0].message.content)
+            batch_end = batch_start + len(batch)
+            for m in data.get("matches", []):
+                idx = m.get("index")
+                term = m.get("term", "").strip()
+                if not isinstance(idx, int) or not (batch_start <= idx < batch_end) or not term:
+                    continue
+                seg = segments[idx]
+                try:
+                    confidence = max(0.0, min(100.0, float(m.get("confidence", 0)))) / 100.0
+                except (TypeError, ValueError):
+                    confidence = 0.0
+                matches.append(
+                    {
+                        "term": term,
+                        "matched_text": term,
+                        "start": seg["start"],
+                        "end": seg["end"],
+                        "confidence": round(confidence, 4),
+                    }
+                )
+        except Exception:
+            logger.exception(
+                "Lỗi khi gọi OpenRouter/Haiku để phát hiện thuật ngữ (segment %d-%d), bỏ qua batch này.",
+                batch_start,
+                batch_start + len(batch) - 1,
+            )
+
+    matches.sort(key=lambda m: m["start"])
+    return matches
+
+
 def validate_clip(transcript_vi: str, known_terms: list[str], api_key: str) -> dict:
     """Trả về {"extra_terms": [...], "suggested_text": "...", "confidence_percent": 0-100 | None}.
 

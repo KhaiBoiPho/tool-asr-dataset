@@ -37,6 +37,7 @@ def transcribe(
         beam_size=beam_size,
         word_timestamps=True,
         initial_prompt=initial_prompt,
+        vad_filter=True,
     )
 
     logger.info(

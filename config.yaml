@@ -5,7 +5,7 @@ whisper:
   model_size: auto         # auto = luôn dùng large-v3; hoặc ép cứng: large-v3
   compute_type: auto       # auto = tự dò theo VRAM free; hoặc ép cứng: float16 | int8_float16
   language: vi             # ngôn ngữ chính của audio (thuật ngữ tiếng Anh vẫn được giữ nguyên)
-  beam_size: 5
+  beam_size: 2
 
 # Chỉ dùng khi model_size/compute_type = auto. Đơn vị: MB VRAM free (nvidia-smi).
 # Hệ thống chỉ hỗ trợ GPU >= 8GB (2 tier: ~8GB và >=12GB). Tier <8GB đã bị loại bỏ —
